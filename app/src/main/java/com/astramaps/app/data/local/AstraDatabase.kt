@@ -70,13 +70,33 @@ interface PoiSearchDao {
     suspend fun search(query: String, limit: Int): List<PoiSearchEntity>
 }
 
+/**
+ * The on-device database.
+ *
+ * **Schema policy (pre-1.0).** There are no `Migration`s: a version bump makes
+ * [com.astramaps.app.di.AppContainer] drop and recreate every table. That is
+ * deliberate, because all three tables are rebuildable — the pack registry can
+ * be reconstructed by scanning the packs directory, the routing-cell rows from
+ * the `.rd5` files on disk, and `poi_search` from a pack's place index.
+ *
+ * Version 2 is not a format change. Version 1 was never released: builds from
+ * before the entities were finalised wrote a v1 file whose identity hash no
+ * longer matches the generated one, and Room does **not** migrate a same-version
+ * file with a foreign hash — it throws `Room cannot verify the data integrity`
+ * from `checkIdentity()` and the app crashes on launch. Bumping the version
+ * routes those files through the destructive fallback instead.
+ *
+ * Once packs ship this must change: dropping the registry would make the app
+ * forget packs the user already downloaded until the directory is rescanned,
+ * so later schema changes need a real `Migration` (or a rescan-on-open step).
+ */
 @Database(
     entities = [
         InstalledPackEntity::class,
         InstalledRoutingCellEntity::class,
         PoiSearchEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AstraDatabase : RoomDatabase() {

@@ -48,6 +48,33 @@ This was the single riskiest technical assumption in the design, so it is
 If AOSP ever ships FTS5, that test fails loudly and the decision can be
 revisited.
 
+### Room schema policy before 1.0
+
+There are no `Migration`s yet, and `AppContainer` opens the database with
+`fallbackToDestructiveMigration(dropAllTables = true)`. That is safe **only**
+because every table is rebuildable: the pack registry by scanning the packs
+directory, the routing-cell rows from the `.rd5` files on disk, and
+`poi_search` from a pack's place index.
+
+It is also not enough on its own. Room's destructive fallback runs on a
+**version** change; a file written at the *same* version with a different
+identity hash is rejected by `checkIdentity()` with:
+
+```
+Room cannot verify the data integrity. Looks like you've changed schema but forgot to update the version number.
+```
+
+That is not hypothetical: the first launch of the Phase 2 build on a phone that
+had run an earlier development build crashed this way, because the entities had
+changed while `version` stayed 1. `AstraDatabase` is therefore at **version 2**,
+which routes any pre-release v1 file through the fallback.
+`RoomSchemaUpgradeTest` builds exactly that stale file — v1, foreign hash, wrong
+`poi_search` columns — and proves it is replaced instead of fatal.
+
+Once packs ship, a schema change must add a real `Migration` (or a
+rescan-on-open step): silently dropping the registry would make the app forget
+packs the user already downloaded.
+
 ### Why the routing payload is cell-scoped while the map is bbox-scoped
 
 BRouter distributes its routing graph on a fixed 5°×5° global grid. There are
@@ -242,7 +269,7 @@ in `app/proguard-rules.pro` so a release build can be verified to link.
 | Layer | Where | What it proves |
 |---|---|---|
 | Pure JVM | `app/src/test/` | Palette contrast maths, BRouter vendoring invariants, Room DAO behaviour (Robolectric). |
-| Instrumented | `app/src/androidTest/` | What only a real device can prove: FTS4 vs FTS5, real SQLite behaviour, native library loading, and that a prebuilt pack still yields tiles with the radios off. |
+| Instrumented | `app/src/androidTest/` | What only a real device can prove: FTS4 vs FTS5, real SQLite behaviour, that a stale pre-release database is replaced instead of crashing, native library loading, and that a prebuilt pack still yields tiles with the radios off. |
 | Release build | CI | R8 does not strip `btools.router.StdModel`, `btools.router.KinematicModel` or `btools.mapaccess.Rd5DiffTool`. |
 
 CI runs `:app:assembleDebug`, `:app:testDebugUnitTest`, `:third_party:brouter:build`

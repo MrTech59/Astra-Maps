@@ -40,6 +40,10 @@ class AppContainer(context: Context) {
     /**
      * On-device database. Holds installed-pack bookkeeping and, from Phase 2
      * onwards, the local POI/place/street search index.
+     *
+     * The destructive fallback is the pre-1.0 schema policy; see the KDoc on
+     * [AstraDatabase] for why it is safe today and must not survive the first
+     * release.
      */
     val database: AstraDatabase = Room
         .databaseBuilder(appContext, AstraDatabase::class.java, AstraDatabase.NAME)
