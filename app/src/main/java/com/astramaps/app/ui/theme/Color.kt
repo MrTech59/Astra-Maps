@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.Color
 // --- Dark theme (default) -----------------------------------------------------
 val LandDark = Color(0xFF12141F)
 val WaterFillDark = Color(0xFF0E2A5C)
-val CoastlineDark = Color(0xFF38E1F0) // 55% alpha over WaterFillDark
+val CoastlineDark = Color(0xFF38E1F0) // 55% alpha: 3.73:1 on WaterFillDark, 4.24:1 on LandDark
 val MotorwayDark = Color(0xFF38E1F0) // 11.52:1 on LandDark
 val MajorDark = Color(0xFFFF6FD8) //  7.44:1 on LandDark
 val MinorDark = Color(0xFF7C6BFF) //  4.72:1 on LandDark
@@ -25,7 +25,7 @@ val LabelDark = Color(0xFFC7D2FF) // 12.30:1 on LandDark
 // --- Daylight theme -----------------------------------------------------------
 val LandDaylight = Color(0xFFEFEDE4)
 val WaterFillDaylight = Color(0xFF5B96D6)
-val CoastlineDaylight = Color(0xFF1A4E8A) //  7.16:1 on LandDaylight
+val CoastlineDaylight = Color(0xFF123A63) //  3.74:1 on WaterFillDaylight, 9.89:1 on LandDaylight
 val MotorwayDaylight = Color(0xFFC2410C) //  4.41:1 on LandDaylight
 val MajorDaylight = Color(0xFFB45309) //  4.28:1 on LandDaylight
 val MinorDaylight = Color(0xFF7C6BFF) //  3.31:1 on LandDaylight

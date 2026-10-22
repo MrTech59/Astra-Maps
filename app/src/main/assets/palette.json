@@ -5,33 +5,42 @@
     "dark": {
       "land": { "hex": "#12141F", "contrastOnLand": null },
       "waterFill": { "hex": "#0E2A5C", "contrastOnLand": 1.31 },
-      "coastlineStroke": { "hex": "#38E1F0", "alpha": 0.55, "contrastOnWater": 3.73, "contrastOnLand": 4.90 },
+      "coastlineStroke": { "hex": "#38E1F0", "alpha": 0.55, "contrastOnWater": 3.73, "contrastOnLand": 4.24 },
       "roads": {
         "motorway": { "hex": "#38E1F0", "contrastOnLand": 11.52 },
         "major": { "hex": "#FF6FD8", "contrastOnLand": 7.44 },
         "minor": { "hex": "#7C6BFF", "contrastOnLand": 4.72 },
         "residential": { "hex": "#46527F", "contrastOnLand": 2.42 }
       },
-      "labels": { "hex": "#C7D2FF", "contrastOnLand": 12.3 }
+      "labels": { "hex": "#C7D2FF", "contrastOnLand": 12.3 },
+      "exemptions": {
+        "waterFill": "Area fill, not information-bearing. Its boundary is carried by coastlineStroke, which clears 3:1 against the fill as well as against the land.",
+        "roads.residential": "Lowest-priority context class. It exists to show that a street is there; the information-bearing route hierarchy is motorway/major/minor, which all clear 3:1."
+      }
     },
     "daylight": {
       "land": { "hex": "#EFEDE4", "contrastOnLand": null },
       "waterFill": { "hex": "#5B96D6", "contrastOnLand": 2.64 },
-      "coastlineStroke": { "hex": "#1A4E8A", "alpha": 1.0, "contrastOnWater": 2.71, "contrastOnLand": 7.16 },
+      "coastlineStroke": { "hex": "#123A63", "alpha": 1.0, "contrastOnWater": 3.74, "contrastOnLand": 9.89 },
       "roads": {
         "motorway": { "hex": "#C2410C", "contrastOnLand": 4.41 },
         "major": { "hex": "#B45309", "contrastOnLand": 4.28 },
         "minor": { "hex": "#7C6BFF", "contrastOnLand": 3.31 },
         "residential": { "hex": "#8E8A80", "contrastOnLand": 2.94 }
       },
-      "labels": { "hex": "#1A1A1A", "contrastOnLand": 14.84 }
+      "labels": { "hex": "#1A1A1A", "contrastOnLand": 14.84 },
+      "exemptions": {
+        "waterFill": "Area fill, not information-bearing. Its boundary is carried by coastlineStroke, which clears 3:1 against the fill as well as against the land.",
+        "roads.residential": "Lowest-priority context class. It exists to show that a street is there; the information-bearing route hierarchy is motorway/major/minor, which all clear 3:1."
+      }
     }
   },
   "notes": [
     "land #12141F was derived by solving for the measured contrast ratios (motorway 11.52, major 7.44, minor 4.72, residential 2.42, labels 12.30, water 1.31).",
-    "residential (2.42) and waterFill (1.31) are area fills, not information-bearing strokes; they are exempt from the 3:1 non-text rule provided a coastline stroke is drawn.",
-    "CHANGED FROM THE APPROVED PLAN: the plan specified a coastline alpha of 0.40, but that measures only 2.63:1 against the water fill, which fails the plan's own 3:1 non-text gate. The alpha was raised to 0.55, giving 3.73:1 against water and 4.90:1 against land. This is a one-number change and can be reverted by lowering alpha to 0.40.",
-    "The daylight theme gained an explicit coastline stroke (#1A4E8A, opaque): 7.17:1 against daylight land, 2.71:1 against the water fill it outlines.",
-    "A dark-theme coastline is the one stroke that carries meaning, so its alpha is chosen to clear 3:1 in both directions rather than to look decorative."
+    "residential (2.42, 2.94) and waterFill (1.31, 2.64) are below the 3:1 non-text gate on purpose, and each is listed under that theme's `exemptions` with its reason. The test requires such an exemption to name a real element, to be below the threshold (no dead exemptions), and — for waterFill — to be backed by a coastline stroke that itself clears 3:1 against the fill.",
+    "CHANGED FROM THE APPROVED PLAN: the plan specified a coastline alpha of 0.40, but that measures only 2.63:1 against the water fill, which fails the plan's own 3:1 non-text gate. The alpha was raised to 0.55, giving 3.73:1 against water and 4.24:1 against land. This is a one-number change and can be reverted by lowering alpha to 0.40.",
+    "The daylight theme gained an explicit coastline stroke. It started as #1A4E8A, which measures 7.16:1 on land but only 2.71:1 against the daylight water fill #5B96D6 — so a stroke meant to make the coast legible disappeared against the sea, and the waterFill exemption had no valid precondition. It is now #123A63: 3.74:1 against the water fill and 9.89:1 against the land. Both themes are now held to the same rule.",
+    "A dark-theme coastline is the one stroke that carries meaning, so its alpha is chosen to clear 3:1 in both directions rather than to look decorative.",
+    "The dark coastline's recorded contrastOnLand was 4.90 in the first version of this file, which no colour in the theme produces. The composited stroke is #278592 over #12141F, which measures 4.24:1. The old figure survived because the test checked road, label and water ratios but never the coastline's; it does now."
   ]
 }
