@@ -63,8 +63,8 @@ class PmtilesArchive private constructor(
      */
     fun tile(z: Int, x: Int, y: Int): ByteArray? {
         require(z in 0..MAX_ZOOM) { "zoom $z outside 0..$MAX_ZOOM" }
-        val side = 1 shl z
-        require(x in 0 until side && y in 0 until side) { "tile $z/$x/$y outside the z$z grid" }
+        val side = 1L shl z
+        require(x >= 0 && y >= 0 && x < side && y < side) { "tile $z/$x/$y outside the z$z grid" }
 
         val wanted = SlippyTile.tileId(z, x, y)
         var directory = rootEntries
@@ -153,7 +153,7 @@ class PmtilesArchive private constructor(
                     "${header.minZoom}..${header.maxZoom}"
                 break
             }
-            if (x >= (1 shl z) || y >= (1 shl z)) {
+            if (x.toLong() >= (1L shl z) || y.toLong() >= (1L shl z)) {
                 problems += "tile id ${entry.tileId} decodes to out-of-grid $z/$x/$y"
                 break
             }
@@ -404,7 +404,7 @@ object SlippyTile {
     fun tileId(z: Int, x: Int, y: Int): Long {
         require(z in 0..31) { "zoom $z outside 0..31" }
         val side = 1L shl z
-        require(x in 0 until side.toInt() && y in 0 until side.toInt()) {
+        require(x >= 0 && y >= 0 && x < side && y < side) {
             "tile $z/$x/$y outside the z$z grid"
         }
 
@@ -464,20 +464,22 @@ object SlippyTile {
     /** Number of tiles in every zoom level below [z]. */
     fun tilesBelow(z: Int): Long = ((1L shl (2 * z)) - 1) / 3
 
-    fun lonToX(lon: Double, z: Int): Int =
-        ((lon + 180.0) / 360.0 * (1 shl z)).toInt().coerceIn(0, (1 shl z) - 1)
+    fun lonToX(lon: Double, z: Int): Int {
+        val side = 1L shl z
+        return ((lon + 180.0) / 360.0 * side).toInt().coerceIn(0, (side - 1).toInt())
+    }
 
     fun latToY(lat: Double, z: Int): Int {
         val radians = Math.toRadians(lat.coerceIn(-85.05112878, 85.05112878))
-        val scale = (1 shl z).toDouble()
-        val y = (1.0 - Math.log(Math.tan(radians) + 1.0 / Math.cos(radians)) / Math.PI) / 2.0 * scale
-        return y.toInt().coerceIn(0, (1 shl z) - 1)
+        val side = (1L shl z).toDouble()
+        val y = (1.0 - Math.log(Math.tan(radians) + 1.0 / Math.cos(radians)) / Math.PI) / 2.0 * side
+        return y.toInt().coerceIn(0, (side - 1).toInt())
     }
 
-    fun xToLon(x: Int, z: Int): Double = x.toDouble() / (1 shl z) * 360.0 - 180.0
+    fun xToLon(x: Int, z: Int): Double = x.toDouble() / (1L shl z) * 360.0 - 180.0
 
     fun yToLat(y: Int, z: Int): Double {
-        val n = Math.PI - 2.0 * Math.PI * y / (1 shl z)
+        val n = Math.PI - 2.0 * Math.PI * y / (1L shl z)
         return Math.toDegrees(Math.atan(Math.sinh(n)))
     }
 }
