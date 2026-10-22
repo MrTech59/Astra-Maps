@@ -45,7 +45,7 @@ offline guarantees are provable.
 | Instrumented test on API 35/36 proves `CREATE VIRTUAL TABLE … USING fts4` works | ✅ (SM-A175F/API 36 + emulator/API 35, 4/4 pass) |
 | Instrumented test proves FTS5 is **not** available | ✅ (`no such module: fts5`, SQLite 3.44.5) |
 | Prebuilt FTS4 POI index builds and matches the documented schema | ✅ (6,291,456 B Berlin index; `--verify` OK; `PrebuiltPoiIndexTest` 6/6 on API 35 + API 36) |
-| Offline acceptance harness: device in airplane mode still serves tiles | ✅ (17/17 in airplane mode on API 35; strict mode fails 7/7 when online; 2.86 MB z6–14 archive, every tile read on device) |
+| Offline acceptance harness: device in airplane mode still serves tiles | ✅ (17/17 in airplane mode on API 35, locally and in CI; strict mode fails 7/7 when online; 2.86 MB z6–14 archive, every tile read on device) |
 
 ---
 
