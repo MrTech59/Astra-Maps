@@ -55,7 +55,7 @@ offline guarantees are provable.
 |---|---|
 | TileJSON resolves from `pmtiles://file://` | ✅. MapLibre reports `sources=[astra, org.maplibre.annotations]` after loading the generated style; `MapRenderTest` polls for the `astra` source and fails if it never appears. |
 | A z12 tile returns > 0 bytes from the local archive | ✅. `OfflineTileServingTest.z12TileCarriesRoadAndWaterFeatures` reads a real z12 tile from the fixture and asserts both roads and water features decode. |
-| Map renders on the physical device (OpenGL ES path — the device has no Vulkan) | ⬜. Blocked: the SM-A175F dropped off wireless ADB (port closed) during this session. Emulator verified; the phone run is the remaining step. |
+| Map renders on the physical device (OpenGL ES path — the device has no Vulkan) | ✅. SM-A175F, API 36, Mali-G57 MC2 on OpenGL ES 3.2: the full instrumented suite ran **20/20 with 0 skipped in airplane mode over USB**, including both `MapRenderTest` cases, and the on-screen framebuffer holds the dark palette (31,371 distinct colours, land `#12141F`, water `#0E2A5C`, major `#FF6FD8`, wash `#1B1D2A`). |
 | Palette contrast regression test over `palette.json`: labels ≥ 4.5:1 | ✅. Dark 12.30:1, daylight 14.84:1. |
 | Same test: non-text elements ≥ 3:1 | ✅. Every element is measured as rendered; the two sub-threshold colours (water fill in both themes, residential roads) carry explicit, test-enforced exemptions, and daylight's waterFill exemption only holds because the coastline clears 3.74:1 against the fill. |
 | Daylight theme renders and passes the same gate | ✅. `MapRenderTest` forces `MODE_NIGHT_NO`, snapshots the map and finds the daylight land `#EFEDE4` and water `#5B96D6` in the framebuffer; the gate runs over both themes. |
