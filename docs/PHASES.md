@@ -25,7 +25,7 @@ the check was run and passed.
 | `:app:assembleRelease` builds and R8 keeps the reflectively-loaded path models + `Rd5DiffTool` | ✅ (50.7 MB, 2 ABIs, keeps verified in the release dex) |
 | App installs and launches on a physical device without crashing | ✅ |
 | `./gradlew :app:testDebugUnitTest` passes | ✅ |
-| `planetiler verify schemas/astra_schema.yml` → 5 passed / 0 failed | ✅ |
+| `planetiler verify schemas/astra_schema.yml` → 7 passed / 0 failed | ✅ |
 | CI workflow green on GitHub Actions | ✅ (`build`, `tile-schema`, `instrumented` all pass) |
 
 ---
@@ -37,11 +37,11 @@ offline guarantees are provable.
 
 | Exit criterion | Status |
 |---|---|
-| `planetiler verify schemas/astra_schema.yml` → 5 passed / 0 failed | ✅ (verified in Phase 1) |
-| `planetiler generate-custom` over the Berlin bbox exits 0 | ⬜ |
-| Generated archive size within ±15 % of 31,676,842 B | ⬜ |
-| PMTiles metadata asserts 11 layers / 56 fields | ⬜ |
-| All 20 cycling attributes present on the `roads` layer | ⬜ |
+| `planetiler verify schemas/astra_schema.yml` → 7 passed / 0 failed | ✅ (verified in Phase 1) |
+| `planetiler generate-custom` over the Berlin bbox exits 0 | ✅ (862 tiles, 1,808,276 features) |
+| Generated archive size within ±15 % of 31,676,842 B | ✅ (31,764,127 B, +0.28 %) |
+| PMTiles metadata asserts 11 layers / 58 fields | ✅ (was 56 before the two tag fixes) |
+| All 20 cycling attributes present on the `roads` layer | ✅ (20/20) |
 | Instrumented test on API 35/36 proves `CREATE VIRTUAL TABLE … USING fts4` works | ✅ (SM-A175F/API 36 + emulator/API 35, 4/4 pass) |
 | Instrumented test proves FTS5 is **not** available | ✅ (`no such module: fts5`, SQLite 3.44.5) |
 | Prebuilt FTS4 POI index builds and matches the documented schema | ⬜ |

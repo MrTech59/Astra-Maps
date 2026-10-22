@@ -106,6 +106,62 @@ This is what keeps the Berlin pack at **30.2 MB** for **1,808,276 features**
 across **862 tiles** at z6–14 — roughly 35 KB per tile, which is what makes a
 full regional pack downloadable over a phone connection.
 
+### What the z6–14 archive actually emits
+
+The schema declares 68 attribute fields across the 11 layers. The generated
+Berlin archive reports 56. The gap is not a bug in itself — Planetiler lists a
+field in `vector_layers` only if some feature actually carried it — but the
+breakdown matters, and it was established by counting tags in the real
+Geofabrik Berlin extract with `pyosmium` rather than by reading the YAML:
+
+| Layer | Declared | Emitted | Missing |
+|---|---|---|---|
+| `landcover`, `water`, `waterway`, `places`, `transit`, `boundaries` | 2,4,3,5,3,2 | same | — |
+| `roads` | 27 | 25 | `bicycle_access`, `mtb_scale` |
+| `cycle_network` | 4 | 3 | `colour` |
+| `barriers` | 3 | 1 | `access`, `bicycle` |
+| `bike` | 8 | 5 | `fee`, `charge`, `covered` |
+| `poi` | 7 | 3 | `operator`, `opening_hours`, `takeaway`, `wheelchair` |
+
+Three distinct causes:
+
+1. **Nine attributes sit at `min_zoom: 15` in an archive capped at z14** —
+   all of `barriers`' `access`/`bicycle`, all of `bike`'s `fee`/`charge`/
+   `covered`, and all four `poi` detail fields. This is correct behaviour, not a
+   defect: those fields are detail reserved for z15+. They only become visible
+   if the pack maxzoom is raised, which costs archive size and is a Phase 2
+   decision.
+2. **Two attributes read tag names that do not exist** — a genuine defect.
+   `mtb_scale` read the tag `mtb_scale` (underscore), while OSM spells it
+   `mtb:scale`; the Berlin extract has **928 ways** carrying `mtb:scale` and
+   **zero** carrying `mtb_scale`. `bicycle_access` read `bicycle:access`, which
+   appears **nowhere** in the extract. Both are fixed: `mtb_scale` now reads
+   `mtb:scale`, and `bicycle_access` is derived as `bicycle` falling back to
+   `access`. Both cases are pinned in the schema's `examples` block.
+3. **One attribute is genuinely absent from the data** — `cycle_network`'s
+   `colour` lives on cycle-route *relations*, and the layer reads ways: of the
+   5,478 ways that qualify for the layer, **zero** carry `colour` (or the
+   American `color`).
+
+Cause 2 was invisible to `planetiler verify` because the schema's own example
+fed the same misspelled tag it declared, so the test was self-consistent and
+wrong against real data. That is why the four new `bicycle_access`/`mtb:scale`
+examples matter: they encode the OSM spelling, not the schema's.
+
+### `network` is a relation tag
+
+`cycle_network`'s `include_when` accepts `network: [lcn, rcn, ncn, icn]` on
+**ways**, and the `kind` attribute maps those values. In the Berlin extract,
+**none of the 5,478 qualifying ways carry a `network` tag at all** — all 5,478
+qualify through `bicycle=designated`. `network` is attached to the route
+*relation*, not to its member ways.
+
+So `kind` can currently only ever be `designated`, and the lcn/rcn/ncn/icn
+hierarchy the plan wants for cycling preference is not available from ways
+alone. Recovering it needs relation processing (propagating the parent route's
+`network` onto member ways) or a different source for the hierarchy. This is
+tracked for the routing phase; the map still renders and routes without it.
+
 ---
 
 ## Rendering rules derived from these attributes

@@ -147,7 +147,9 @@ layers:
           - key: bicycle_access
             min_zoom: 11
             value:
-              tag_value: bicycle:access
+              coalesce:
+                - tag_value: bicycle
+                - tag_value: access
           - key: oneway
             min_zoom: 12
             value:
@@ -174,7 +176,7 @@ layers:
             tag_value: incline
           - key: mtb_scale
             min_zoom: 13
-            tag_value: mtb_scale
+            tag_value: mtb:scale
           - key: maxspeed
             min_zoom: 13
             tag_value: maxspeed
@@ -430,7 +432,7 @@ examples:
         highway: track
         surface: gravel
         tracktype: grade2
-        mtb_scale: "2"
+        mtb:scale: "2"
     output:
       - layer: roads
         geometry: line
@@ -484,3 +486,39 @@ examples:
       tags:
         building: yes
     output: []
+
+  # bicycle_access answers "what rule governs cycling here", preferring the
+  # bicycle-specific tag over the generic access tag. Both cases are pinned
+  # because the field previously read the tag `bicycle:access`, which does not
+  # exist anywhere in OSM.
+  - name: bicycle tag wins over access for bicycle_access
+    input:
+      geometry: line
+      source: osm
+      tags:
+        highway: residential
+        bicycle: "no"
+        access: "yes"
+    output:
+      - layer: roads
+        geometry: line
+        tags:
+          class: residential
+          bicycle: "no"
+          access: "yes"
+          bicycle_access: "no"
+
+  - name: bicycle_access falls back to the access tag
+    input:
+      geometry: line
+      source: osm
+      tags:
+        highway: service
+        access: private
+    output:
+      - layer: roads
+        geometry: line
+        tags:
+          class: service
+          access: private
+          bicycle_access: private
