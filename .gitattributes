@@ -13,6 +13,10 @@ gradlew  text eol=lf
 
 # Never apply end-of-line translation to binary assets.
 *.jar   binary
+*.db    binary
+*.pmtiles binary
+*.rd5   binary
+*.df5   binary
 *.png   binary
 *.webp  binary
 *.jpg   binary

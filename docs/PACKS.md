@@ -53,7 +53,7 @@ content-addressed by SHA-256.
     {
       "id": "poi",
       "url": "…/astra-de-01-1.0.0.poi.db",
-      "size": 4898816,
+      "size": 6291456,
       "sha256": "…"
     },
     {
@@ -141,7 +141,7 @@ PMTiles has no delta format, so an updated region is re-downloaded whole
 manifest's SHA-256 for the installed version; a pack is only re-downloaded when
 its hash actually changes. Automatic updates default to Wi-Fi only.
 
-The place index is replaced wholesale (4.7 MB), which is cheap.
+The place index is replaced wholesale (6.0 MB), which is cheap.
 
 ### Routing graph — delta updates
 
@@ -213,7 +213,152 @@ The profile is validated in CI:
 planetiler verify schemas/astra_schema.yml
 ```
 
-It yields **11 layers** carrying **56 attribute fields** in total, of which the
+It yields **11 layers** carrying **58 attribute fields** in total, of which the
 `roads` layer alone carries the 20 cycling attributes that the generic
 OpenMapTiles and Protomaps schemas omit. See
 [`docs/ATTRIBUTES.md`](ATTRIBUTES.md).
+
+---
+
+## 8. Place index format (`*.poi.db`)
+
+The place index is a self-contained, **read-only** SQLite database with an
+FTS4 full-text index. It is built offline by
+[`tools/build_poi_index.py`](../tools/build_poi_index.py) and opened directly by
+the app. It is deliberately **not** a Room database: it carries no Room identity
+hash and no Room schema version, so it cannot be broken by a Room upgrade and it
+does not need a migration when the app's own schema moves.
+
+```bash
+python tools/build_poi_index.py --pbf berlin.osm.pbf --out astra-de-01.poi.db
+python tools/build_poi_index.py --verify astra-de-01.poi.db
+```
+
+`--verify` checks the artifact against the contract below, so this document and
+the shipped file cannot drift apart silently.
+
+`--limit N` is **fixture-only**: it keeps N rows per table but samples them
+round-robin across kinds, so a truncated index still contains every kind a full
+one does. Never use it for a shipped pack. The instrumented test fixture is
+built exactly this way:
+
+```bash
+python tools/build_poi_index.py --pbf berlin.osm.pbf \
+    --limit 600 --out app/src/androidTest/assets/astra_poi_fixture.db
+```
+
+### Header
+
+| Field | Value |
+|---|---|
+| `PRAGMA application_id` | `0x52545341` (ASCII `ASTR`) |
+| `PRAGMA user_version` | `1` (bump when the format changes incompatibly) |
+| `PRAGMA page_size` | `4096` |
+| Journal mode | none persisted — the file is never written on device |
+
+### Schema
+
+```sql
+CREATE TABLE poi (
+    id       INTEGER PRIMARY KEY,
+    osm_type TEXT    NOT NULL,   -- 'node' | 'way'
+    osm_id   INTEGER NOT NULL,
+    kind     TEXT    NOT NULL,   -- food, parking, water, bike_shop, ...
+    name     TEXT    NOT NULL,   -- '' when the feature is unnamed
+    name_en  TEXT,
+    lat      REAL    NOT NULL,
+    lon      REAL    NOT NULL
+);
+CREATE INDEX poi_kind    ON poi (kind);
+CREATE INDEX poi_lat_lon ON poi (lat, lon);
+CREATE VIRTUAL TABLE poi_fts USING fts4(
+    name, name_en, kind,
+    content='poi',
+    tokenize=unicode61 "remove_diacritics=2"
+);
+
+CREATE TABLE place (
+    id         INTEGER PRIMARY KEY,
+    osm_type   TEXT    NOT NULL,
+    osm_id     INTEGER NOT NULL,
+    kind       TEXT    NOT NULL,  -- city, suburb, quarter, ...
+    name       TEXT    NOT NULL,
+    name_en    TEXT,
+    population INTEGER,
+    lat        REAL    NOT NULL,
+    lon        REAL    NOT NULL
+);
+CREATE VIRTUAL TABLE place_fts USING fts4(
+    name, name_en, kind,
+    content='place',
+    tokenize=unicode61 "remove_diacritics=2"
+);
+
+CREATE TABLE street (
+    name   TEXT PRIMARY KEY,
+    class  TEXT,
+    count  INTEGER,
+    minlat REAL, maxlat REAL, minlon REAL, maxlon REAL
+);
+CREATE VIRTUAL TABLE street_fts USING fts4(
+    name,
+    content='street',
+    tokenize=unicode61 "remove_diacritics=2"
+);
+```
+
+All three text indexes are **external content** (`content=<table>`): the FTS
+tables store index terms only, and a `MATCH` joins back by rowid so a single
+query returns name *and* coordinates:
+
+```sql
+SELECT p.name, p.kind, p.lat, p.lon
+FROM poi_fts f
+JOIN poi p ON p.id = f.rowid
+WHERE poi_fts MATCH :query
+  AND p.kind IN (:kinds)
+ORDER BY p.id
+LIMIT :limit;
+```
+
+Putting `lat`/`lon` inside the FTS table would tokenise every coordinate as
+text, inflating the index to answer a query that `MATCH` cannot express —
+coordinates are filtered with inequalities, not with full-text search.
+
+### Tokenizer
+
+`unicode61` with `remove_diacritics=2`, not FTS4's default `simple` tokenizer.
+`simple` only lowercases ASCII, so `Köpenick` would not match `kopenick`. With
+`unicode61` it does: on the Berlin index, `place_fts MATCH 'kopenick*'` returns
+3 places and `street_fts MATCH 'kopenick*'` returns 25 streets. This also makes
+the index work for German, French, Polish and Czech place names without any
+per-language code.
+
+### Deliberate omissions
+
+| Omitted | Why |
+|---|---|
+| `UNIQUE INDEX` on `(osm_type, osm_id)` | The extract emits each node and way at most once, so uniqueness holds by construction, and the app never looks a POI up by OSM id. The index cost 0.76 MB and answered no query. |
+| Index on `street(name)` | `name TEXT PRIMARY KEY` is already backed by a unique index; an explicit one duplicated it (0.31 MB). |
+| `tags` JSON column | The tile layer already carries the tags. Search needs name, kind and position; shipping the raw tag bag doubled the file for data nothing queried. |
+| POIs named `bench`, `emergency`, `attraction`, `historic`, `shop` | Common, mostly unnamed, and never what someone types into a search box. They remain in the map tiles. |
+
+### Measured size — Berlin
+
+Built from the Geofabrik Berlin extract (`berlin.osm.pbf`, 99,813,884 B):
+
+| Table | Rows | Bytes |
+|---|---|---|
+| `poi` + `poi_kind` + `poi_lat_lon` | 39,530 | 4,203,264 |
+| `poi_fts` | 39,530 | 909,312 |
+| `street` + `street_fts` | 13,012 | 1,851,392 |
+| `place` + `place_fts` | 761 | 135,168 |
+| **Total file** | | **6,291,456 (6.00 MB)** |
+
+15,081 of the POIs have a name, so 24,449 contribute only a `kind` token. They
+are kept because "show me bike parking near here" does not need a name.
+
+An earlier plan figure of 4.7 MB was measured before the street and place tables
+were included and with a `tags` column still present; 6.00 MB is the measured
+size of the format described here, and it is what the manifest must carry.
+

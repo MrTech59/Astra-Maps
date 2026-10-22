@@ -37,6 +37,14 @@ lookups.dat
 # Built POI indexes
 *.db
 *.jsonl
+# ...except the small fixture the instrumented tests open on the device, which
+# proves a prebuilt FTS4 index written by the host SQLite is readable by
+# Android's bundled SQLite.
+!app/src/androidTest/assets/*.db
 
 # planetiler working dirs
 planetiler-cache/
+
+# Python bytecode from the tools/ scripts
+__pycache__/
+*.pyc
