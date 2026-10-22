@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Astra Maps launcher icon foreground: a stylised wheel + route arc. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- wheel -->
+    <path
+        android:fillColor="#38E1F0"
+        android:pathData="M40,64m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0" />
+    <path
+        android:fillColor="#12141F"
+        android:pathData="M40,64m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+
+    <!-- wheel -->
+    <path
+        android:fillColor="#FF6FD8"
+        android:pathData="M68,64m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0" />
+    <path
+        android:fillColor="#12141F"
+        android:pathData="M68,64m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+
+    <!-- frame / route -->
+    <path
+        android:strokeColor="#C7D2FF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M40,64 L50,42 L68,64 L52,64" />
+
+    <!-- handlebar + saddle -->
+    <path
+        android:strokeColor="#C7D2FF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M50,42 L60,36" />
+</vector>

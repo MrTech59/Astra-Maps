@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cloud backup and device transfer are restricted to app settings.
+
+    The single <include> per section restricts both to shared preferences.
+    Downloaded regional packs are large and re-downloadable, and the on-device
+    database is rebuilt from the installed packs, so neither is transferred.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

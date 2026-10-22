@@ -1,0 +1,486 @@
+﻿schema_name: Astra Maps
+schema_description: >
+  Cycling-focused vector tile schema for Astra Maps. Omits buildings, aerodromes and
+  general landuse detail a cyclist never needs; carries the OSM tags that describe
+  cycle infrastructure, surface quality and legal cycling access.
+attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+version: "1.0.0"
+
+args:
+  osm_path:
+    description: Path to the OSM PBF to process
+    default: berlin.osm.pbf
+
+sources:
+  osm:
+    type: osm
+    local_path: '${ args.osm_path }'
+
+layers:
+
+  - id: landcover
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 8
+        include_when:
+          natural: [wood, scrub, grassland, heath, bare_rock, sand]
+          landuse: [forest, grass, meadow, farmland, orchard, vineyard, village_green, allotments, recreation_ground, cemetery, greenfield, brownfield]
+          leisure: [park, garden, golf_course, nature_reserve, common]
+        attributes:
+          - key: class
+            value:
+              wood: { natural: wood }
+              grass: { landuse: [grass, meadow, village_green] }
+              park: { leisure: [park, garden, common, golf_course, nature_reserve] }
+              farmland: { landuse: [farmland, orchard, vineyard, allotments] }
+              bare: { natural: [bare_rock, sand, scrub, heath] }
+              other: otherwise
+          - key: name
+            tag_value: name
+
+  - id: water
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 6
+        include_when:
+          natural: water
+          landuse: [reservoir, basin]
+          waterway: [riverbank, dock]
+        attributes:
+          - key: class
+            value:
+              lake: { natural: water }
+              reservoir: { landuse: [reservoir, basin] }
+              riverbank: { waterway: [riverbank, dock] }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: name_en
+            tag_value: name:en
+          - key: intermittent
+            value: { yes: { intermittent: [yes, seasonal] }, no: otherwise }
+
+  - id: waterway
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 10
+        include_when:
+          waterway: [river, stream, canal, drain, ditch]
+        attributes:
+          - key: class
+            value:
+              river: { waterway: river }
+              canal: { waterway: canal }
+              stream: { waterway: [stream, ditch, drain] }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: brunnel
+            value: '${ feature.tags.has("bridge") ? "bridge" : (feature.tags.has("tunnel") ? "tunnel" : "") }'
+
+  - id: roads
+    features:
+      - source: osm
+        geometry: line
+        min_zoom:
+          default_value: 14
+          overrides:
+            6: { highway: [motorway, motorway_link, trunk, trunk_link] }
+            8: { highway: [primary, primary_link] }
+            9: { highway: [secondary, secondary_link] }
+            10: { highway: [tertiary, tertiary_link] }
+            12: { highway: [residential, living_street, unclassified, path, track, cycleway, footway, pedestrian] }
+        include_when:
+          highway: __any__
+        attributes:
+          - key: class
+            value:
+              motorway: { highway: [motorway, motorway_link] }
+              trunk: { highway: [trunk, trunk_link] }
+              primary: { highway: [primary, primary_link] }
+              secondary: { highway: [secondary, secondary_link] }
+              tertiary: { highway: [tertiary, tertiary_link] }
+              residential: { highway: [residential, living_street] }
+              unclassified: { highway: unclassified }
+              service: { highway: service }
+              path: { highway: [path, pedestrian] }
+              footway: { highway: footway }
+              cycleway: { highway: cycleway }
+              track: { highway: track }
+              bridleway: { highway: bridleway }
+              steps: { highway: steps }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: name_en
+            tag_value: name:en
+          - key: surface
+            min_zoom: 12
+            tag_value: surface
+          - key: smoothness
+            min_zoom: 13
+            tag_value: smoothness
+          - key: tracktype
+            min_zoom: 13
+            tag_value: tracktype
+          - key: bicycle
+            min_zoom: 11
+            tag_value: bicycle
+          - key: bicycle_fwd
+            min_zoom: 12
+            tag_value: bicycle:forward
+          - key: bicycle_bwd
+            min_zoom: 12
+            tag_value: bicycle:backward
+          - key: cycleway
+            min_zoom: 11
+            tag_value: cycleway
+          - key: segregated
+            min_zoom: 12
+            tag_value: segregated
+          - key: access
+            min_zoom: 12
+            tag_value: access
+          - key: bicycle_access
+            min_zoom: 11
+            value:
+              tag_value: bicycle:access
+          - key: oneway
+            min_zoom: 12
+            value:
+              tag_value: oneway
+              type: direction
+          - key: oneway_bicycle
+            min_zoom: 12
+            value:
+              coalesce:
+                - tag_value: oneway:bicycle
+                - tag_value: cycleway:oneway
+              type: direction
+          - key: network
+            min_zoom: 11
+            tag_value: network
+          - key: ref
+            min_zoom: 12
+            tag_value: ref
+          - key: lit
+            min_zoom: 13
+            tag_value: lit
+          - key: incline
+            min_zoom: 13
+            tag_value: incline
+          - key: mtb_scale
+            min_zoom: 13
+            tag_value: mtb_scale
+          - key: maxspeed
+            min_zoom: 13
+            tag_value: maxspeed
+          - key: width
+            min_zoom: 14
+            tag_value: width
+          - key: shoulder
+            min_zoom: 14
+            tag_value: shoulder
+          - key: sidewalk
+            min_zoom: 14
+            tag_value: sidewalk
+          - key: service
+            min_zoom: 13
+            tag_value: service
+          - key: layer
+            min_zoom: 12
+            tag_value: layer
+          - key: brunnel
+            min_zoom: 11
+            value: '${ feature.tags.has("bridge") ? "bridge" : (feature.tags.has("tunnel") ? "tunnel" : "") }'
+
+  - id: cycle_network
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 10
+        include_when:
+          __any__:
+            - network: [lcn, rcn, ncn, icn]
+            - bicycle: designated
+        attributes:
+          - key: kind
+            value:
+              lcn: { network: lcn }
+              rcn: { network: rcn }
+              ncn: { network: ncn }
+              icn: { network: icn }
+              designated: { bicycle: designated }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: ref
+            tag_value: ref
+          - key: colour
+            min_zoom: 12
+            tag_value: colour
+
+  - id: barriers
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 14
+        include_when:
+          barrier: [bollard, cycle_barrier, gate, block, lift_gate, kissing_gate, stile, turnstile]
+        attributes:
+          - key: class
+            value:
+              bollard: { barrier: [bollard, cycle_barrier] }
+              gate: { barrier: [gate, lift_gate, kissing_gate] }
+              block: { barrier: [block, stile, turnstile] }
+              other: otherwise
+          - key: access
+            min_zoom: 15
+            tag_value: access
+          - key: bicycle
+            min_zoom: 15
+            tag_value: bicycle
+
+  - id: bike
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 13
+        include_when:
+          amenity: [bicycle_parking, bicycle_rental, bicycle_repair_station, charging_station]
+          shop: [bicycle, bicycle_repair]
+        attributes:
+          - key: kind
+            value:
+              parking: { amenity: bicycle_parking }
+              rental: { amenity: bicycle_rental }
+              repair: { amenity: bicycle_repair_station }
+              shop: { shop: [bicycle, bicycle_repair] }
+              charging: { amenity: charging_station }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: operator
+            min_zoom: 14
+            tag_value: operator
+          - key: brand
+            min_zoom: 14
+            tag_value: brand
+          - key: capacity
+            min_zoom: 14
+            value:
+              coalesce:
+                - tag_value: capacity
+                - tag_value: bicycle_parking:capacity
+              type: integer
+          - key: fee
+            min_zoom: 15
+            tag_value: fee
+          - key: charge
+            min_zoom: 15
+            tag_value: charge
+          - key: covered
+            min_zoom: 15
+            tag_value: covered
+
+  - id: poi
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 13
+        include_when:
+          amenity: [cafe, restaurant, fast_food, pub, bar, drinking_water, toilets, bench, picnic_site, shelter, pharmacy, hospital, atm, bank, post_office, fuel, waste_basket, vending_machine, place_of_worship, university, school, library, police, fire_station, townhall, childcare, public_bath]
+          shop: [convenience, supermarket, bakery, butcher, greengrocer, alcohol, hair_care, laundry, dry_cleaning, books, clothing, hardware, car_repair, bicycle]
+          tourism: [hotel, hostel, guest_house, attraction, viewpoint, information, artwork, museum, gallery, theme_park, picnic_site]
+          natural: [spring, peak, cave_entrance, beach]
+          historic: [memorial, monument, castle, ruins]
+          emergency: [fire_hydrant, defibrillator, phone]
+          highway: [bus_stop, street_lamp]
+          railway: [station, halt, tram_stop, subway_entrance]
+        attributes:
+          - key: kind
+            value:
+              food: { amenity: [cafe, restaurant, fast_food, pub, bar] }
+              water: { amenity: drinking_water }
+              toilets: { amenity: toilets }
+              bench: { amenity: bench }
+              picnic_site: { amenity: picnic_site }
+              shelter: { amenity: shelter }
+              bike_shop: { shop: [bicycle, bicycle_repair] }
+              shop: { shop: __any__ }
+              lodging: { tourism: [hotel, hostel, guest_house] }
+              attraction: { tourism: [attraction, viewpoint, museum, gallery, artwork, theme_park, information] }
+              natural: { natural: [spring, peak, cave_entrance, beach] }
+              historic: { historic: [memorial, monument, castle, ruins] }
+              emergency: { emergency: [fire_hydrant, defibrillator, phone] }
+              transit: { railway: [station, halt, tram_stop, subway_entrance] }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: name_en
+            tag_value: name:en
+          - key: operator
+            min_zoom: 15
+            tag_value: operator
+          - key: opening_hours
+            min_zoom: 15
+            tag_value: opening_hours
+          - key: takeaway
+            min_zoom: 15
+            tag_value: takeaway
+          - key: wheelchair
+            min_zoom: 15
+            tag_value: wheelchair
+
+  - id: places
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 8
+        include_when:
+          place: [city, town, village, suburb, neighbourhood, hamlet, isolated_dwelling, city_block, quarter, borough, locality]
+        attributes:
+          - key: class
+            value:
+              city: { place: [city, borough] }
+              town: { place: [town, locality] }
+              village: { place: [village, hamlet, isolated_dwelling] }
+              suburb: { place: [suburb, quarter, city_block] }
+              neighbourhood: { place: neighbourhood }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: name_en
+            tag_value: name:en
+          - key: population
+            min_zoom: 9
+            value:
+              tag_value: population
+              type: long
+          - key: capital
+            min_zoom: 10
+            tag_value: capital
+
+  - id: transit
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 11
+        include_when:
+          railway: [rail, light_rail, subway, tram, narrow_gauge, monorail]
+        attributes:
+          - key: class
+            value:
+              rail: { railway: [rail, light_rail, narrow_gauge] }
+              subway: { railway: subway }
+              tram: { railway: [tram, monorail] }
+              other: otherwise
+          - key: name
+            tag_value: name
+          - key: ref
+            tag_value: ref
+
+  - id: boundaries
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 6
+        include_when:
+          boundary: administrative
+          admin_level: [2, 4]
+        attributes:
+          - key: admin_level
+            tag_value: admin_level
+          - key: name
+            tag_value: name
+
+examples:
+  - name: protected cycleway carries cycling attributes
+    input:
+      geometry: line
+      source: osm
+      tags:
+        highway: cycleway
+        bicycle: designated
+        surface: asphalt
+        segregated: yes
+        oneway: "yes"
+    output:
+      - layer: roads
+        geometry: line
+        tags:
+          class: cycleway
+          bicycle: designated
+          surface: asphalt
+          segregated: yes
+          oneway: 1
+      - layer: cycle_network
+        geometry: line
+        tags:
+          kind: designated
+
+  - name: gravel track carries mtb_scale and tracktype
+    input:
+      geometry: line
+      source: osm
+      tags:
+        highway: track
+        surface: gravel
+        tracktype: grade2
+        mtb_scale: "2"
+    output:
+      - layer: roads
+        geometry: line
+        tags:
+          class: track
+          surface: gravel
+          tracktype: grade2
+          mtb_scale: "2"
+
+  - name: bike parking becomes a bike feature
+    input:
+      geometry: point
+      source: osm
+      tags:
+        amenity: bicycle_parking
+        capacity: "40"
+        name: Alexanderplatz
+    output:
+      - layer: bike
+        geometry: point
+        tags:
+          kind: parking
+          name: Alexanderplatz
+          capacity: 40
+
+  - name: local cycle network is emitted in both roads and cycle_network
+    input:
+      geometry: line
+      source: osm
+      tags:
+        highway: cycleway
+        network: lcn
+        ref: "1"
+    output:
+      - layer: roads
+        geometry: line
+        tags:
+          class: cycleway
+          network: lcn
+          ref: "1"
+      - layer: cycle_network
+        geometry: line
+        tags:
+          kind: lcn
+          ref: "1"
+
+  - name: buildings are never emitted
+    input:
+      geometry: polygon
+      source: osm
+      tags:
+        building: yes
+    output: []

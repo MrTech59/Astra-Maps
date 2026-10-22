@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-theme land colour; see assets/palette.json for the full palette. -->
+    <color name="astra_land">#12141F</color>
+    <color name="ic_launcher_background">#12141F</color>
+</resources>

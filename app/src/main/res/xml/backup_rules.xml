@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Back up app settings only.
+
+    The single <include> restricts the backup to shared preferences. Every
+    other domain — including downloaded regional packs and the on-device
+    database — is therefore excluded by construction, so no <exclude> entries
+    are needed (and lint rejects excludes for paths that are not included).
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+</full-backup-content>

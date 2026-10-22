@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Compose supplies the real theming. This is the platform theme used for
+        the splash/window background before the first frame.
+    -->
+    <style name="Theme.AstraMaps" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/astra_land</item>
+        <item name="android:navigationBarColor">@color/astra_land</item>
+        <item name="android:windowBackground">@color/astra_land</item>
+    </style>
+</resources>

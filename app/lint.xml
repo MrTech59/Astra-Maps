@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+        <adaptive-icon> is an API 26 element.
+
+        Lint's ObsoleteSdkInt check suggests merging `mipmap-anydpi-v26` into
+        `mipmap-anydpi`, because minSdkVersion is already 26. Doing so breaks
+        the build: without the version qualifier the resource merger assigns
+        the adaptive icon to an earlier API level, AAPT2 drops it as an
+        unknown element, and the manifest reference to @mipmap/ic_launcher
+        fails to link.
+
+        The -v26 qualifier is therefore required, not redundant.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>
