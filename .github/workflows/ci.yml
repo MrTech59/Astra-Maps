@@ -131,20 +131,4 @@ jobs:
           emulator-options: >-
             -no-window -no-audio -no-boot-anim -no-snapshot
             -gpu swiftshader_indirect
-          script: |
-            set -eu
-            adb shell cmd connectivity airplane-mode enable
-            for _ in $(seq 1 30); do
-              if adb shell dumpsys connectivity | grep -q 'Active default network: none'; then
-                break
-              fi
-              sleep 1
-            done
-            if ! adb shell dumpsys connectivity | grep -q 'Active default network: none'; then
-              echo '::error title=airplane mode::the emulator still has a default network'
-              adb shell dumpsys connectivity | grep -m1 'Active default network' || true
-              exit 1
-            fi
-            echo "device is offline: $(adb shell dumpsys connectivity | grep -m1 'Active default network')"
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.astra.requireOffline=true
+          script: bash scripts/run-offline-instrumented-tests.sh
