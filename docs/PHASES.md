@@ -22,10 +22,11 @@ the check was run and passed.
 | APK contains `libmaplibre.so` + `libmaplibre-opengl.so` for the target ABIs | ✅ |
 | Vendored BRouter compiles as `:third_party:brouter` | ✅ |
 | BRouter + MapLibre classes present in the dex | ✅ |
+| `:app:assembleRelease` builds and R8 keeps the reflectively-loaded path models + `Rd5DiffTool` | ✅ (50.7 MB, 2 ABIs, keeps verified in the release dex) |
 | App installs and launches on a physical device without crashing | ✅ |
 | `./gradlew :app:testDebugUnitTest` passes | ✅ |
 | `planetiler verify schemas/astra_schema.yml` → 5 passed / 0 failed | ✅ |
-| CI workflow green on GitHub Actions | ✅ |
+| CI workflow green on GitHub Actions | ✅ (`build`, `tile-schema`, `instrumented` all pass) |
 
 ---
 
@@ -41,8 +42,8 @@ offline guarantees are provable.
 | Generated archive size within ±15 % of 31,676,842 B | ⬜ |
 | PMTiles metadata asserts 11 layers / 56 fields | ⬜ |
 | All 20 cycling attributes present on the `roads` layer | ⬜ |
-| Instrumented test on API 35/36 proves `CREATE VIRTUAL TABLE … USING fts4` works | ⬜ |
-| Instrumented test proves FTS5 is **not** available | ⬜ |
+| Instrumented test on API 35/36 proves `CREATE VIRTUAL TABLE … USING fts4` works | ✅ (SM-A175F/API 36 + emulator/API 35, 4/4 pass) |
+| Instrumented test proves FTS5 is **not** available | ✅ (`no such module: fts5`, SQLite 3.44.5) |
 | Prebuilt FTS4 POI index builds and matches the documented schema | ⬜ |
 | Offline acceptance harness: device in airplane mode still serves tiles | ⬜ |
 

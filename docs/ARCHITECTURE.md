@@ -142,6 +142,47 @@ cleartext exemption is needed.
 `gradle/libs.versions.toml` is the single source of truth for versions. The
 resolved graph is verified with `dependencyInsight` in CI.
 
+### Release build and R8
+
+Release builds run R8 (`isMinifyEnabled` + `isShrinkResources`) and ship only
+`arm64-v8a` and `x86_64` natives, which is where the 100 MB of debug native
+libraries collapses to two ABIs. `:app:assembleRelease` was run and the output
+inspected with `apkanalyzer dex packages`:
+
+| Measure | Debug | Release |
+|---|---|---|
+| APK size | 104,098,014 B | 50,728,227 B |
+| `classes*.dex` | 13 files | 1 file |
+| Classes | 18,016 | 3,508 |
+| `btools.*` classes | 116 | 14 |
+
+The fourteen retained BRouter classes are exactly the ones the keep rules name,
+plus the types their signatures mention. That is the *correct* result right
+now: the app does not call BRouter yet, so R8 reaches those classes only
+through `app/proguard-rules.pro`. `RoutingEngine`, `OsmTrack`, `OsmNodeNamed`
+and `VoiceHint` are stripped today and reappear automatically once the Phase 4
+`RouteProvider` implementation references them statically.
+
+The keeps are load-bearing rather than defensive, because
+`RoutingContext.setModel` instantiates the path model **by name**:
+
+```java
+if (className == null) {
+  pm = new StdModel();                       // tag-less profiles take this branch
+} else {
+  Class<?> clazz = Class.forName(className); // reflective
+  pm = (OsmPathModel) clazz.getDeclaredConstructor().newInstance();
+}
+```
+
+A stock cycling `.brf` carries no `---model:` tag, so `_modelClass` is `null`
+and `new StdModel()` runs directly. A profile that *does* name a model (BRouter
+ships `KinematicModel` and friends for e-bike profiles) goes through
+`Class.forName`, which R8 would defeat by renaming the class. The
+`-keep class btools.router.<Model> { <init>(); }` rules preserve both the name
+and the declared no-arg constructor, and both were confirmed present in the
+release dex.
+
 ---
 
 ## 7. MapLibre
