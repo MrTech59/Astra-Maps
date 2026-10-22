@@ -92,24 +92,36 @@ try {
                 'enabling airplane mode would drop the connection carrying the test ' +
                 'results. Attach the phone over USB, or run against an emulator.')
         }
-        Write-Host 'Enabling airplane mode...' -ForegroundColor Cyan
+        Write-Host 'Disabling radios...' -ForegroundColor Cyan
+        Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'svc', 'data', 'disable') | Out-Null
+        $wifi = @(Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'cmd', 'wifi', 'set-wifi-enabled', 'disabled'))
+        if ($wifi -notmatch 'Wifi is disabled') {
+            Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'svc', 'wifi', 'disable') | Out-Null
+        }
         Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'cmd', 'connectivity', 'airplane-mode', 'enable') | Out-Null
         $airplaneEnabled = $true
 
-        # The state command is immediate; the network stack needs a moment to
-        # tear down. Poll until there is no default network, so the test cannot
-        # race the radio shutdown.
-        $deadline = (Get-Date).AddSeconds(30)
-        while ($true) {
+        # Require the offline state to hold, not just to appear once: a freshly
+        # booted emulator can bring wifi back a minute after airplane mode is
+        # set. Re-assert the radios whenever a network reappears.
+        $stable = 0
+        $deadline = (Get-Date).AddSeconds(90)
+        while ($stable -lt 12) {
             $state = @(Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'dumpsys', 'connectivity'))
             $defaultNetwork = $state | Where-Object { $_ -match 'Active default network:\s*(\S+)' } |
                 Select-Object -First 1
-            $none = $defaultNetwork -and $defaultNetwork -match 'Active default network:\s*none'
-            if ($none) { break }
+            if ($defaultNetwork -match 'Active default network:\s*none') {
+                $stable++
+            } else {
+                $stable = 0
+                Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'svc', 'data', 'disable') | Out-Null
+                Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'cmd', 'wifi', 'set-wifi-enabled', 'disabled') | Out-Null
+                Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'cmd', 'connectivity', 'airplane-mode', 'enable') | Out-Null
+            }
             if ((Get-Date) -gt $deadline) {
                 throw "airplane mode did not take effect; last state: $defaultNetwork"
             }
-            Start-Sleep -Milliseconds 500
+            Start-Sleep -Seconds 1
         }
         Write-Host 'Device is offline.' -ForegroundColor Cyan
     }
@@ -213,9 +225,19 @@ finally {
     if ($airplaneEnabled) {
         try {
             & $adb -s $Serial shell cmd connectivity airplane-mode disable | Out-Null
-            Write-Host 'Airplane mode disabled.' -ForegroundColor Cyan
+            # Wifi can be refused while the airplane-mode transition is still in
+            # flight, so retry until the wifi service reports itself on.
+            for ($i = 0; $i -lt 10; $i++) {
+                & $adb -s $Serial shell cmd wifi set-wifi-enabled enabled | Out-Null
+                $wifiStatus = @(& $adb -s $Serial shell cmd wifi status 2>&1)
+                if ($wifiStatus -match 'Wifi is enabled') { break }
+                & $adb -s $Serial shell svc wifi enable | Out-Null
+                Start-Sleep -Seconds 1
+            }
+            & $adb -s $Serial shell svc data enable | Out-Null
+            Write-Host 'Radios restored.' -ForegroundColor Cyan
         } catch {
-            Write-Host "Could not disable airplane mode; run 'adb -s $Serial shell cmd connectivity airplane-mode disable'" -ForegroundColor Yellow
+            Write-Host "Could not restore the radios; run 'adb -s $Serial shell cmd connectivity airplane-mode disable'" -ForegroundColor Yellow
         }
     }
     Pop-Location

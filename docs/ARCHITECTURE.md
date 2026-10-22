@@ -305,7 +305,12 @@ Three things make it a gate rather than a demo:
   either skips (developer default) or fails (`-e astra.requireOffline true`),
   which is what CI and `-AirplaneMode` pass.
 * **CI runs the whole suite in airplane mode**, not just this test, so no
-  instrumented test can quietly depend on a network.
+  instrumented test can quietly depend on a network. The gate is
+  [`scripts/run-offline-instrumented-tests.sh`](../scripts/run-offline-instrumented-tests.sh),
+  which also persists wifi off: on a freshly booted CI emulator the virtual
+  wifi came back about a minute after airplane mode was set, so the script
+  requires the offline state to hold for twelve consecutive seconds and
+  re-asserts the radios if a network reappears.
 * **Reading a tile does not use MapLibre.** `PmtilesArchive` is a small
   read-only PMTiles v3 reader (header, varint directories, gzip payloads). It
   is not on the rendering path — MapLibre reads `pmtiles://` natively — but it
