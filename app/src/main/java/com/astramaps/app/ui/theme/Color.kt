@@ -28,7 +28,7 @@ val WaterFillDaylight = Color(0xFF5B96D6)
 val CoastlineDaylight = Color(0xFF123A63) //  3.74:1 on WaterFillDaylight, 9.89:1 on LandDaylight
 val MotorwayDaylight = Color(0xFFC2410C) //  4.41:1 on LandDaylight
 val MajorDaylight = Color(0xFFB45309) //  4.28:1 on LandDaylight
-val MinorDaylight = Color(0xFF7C6BFF) //  3.31:1 on LandDaylight
+val MinorDaylight = Color(0xFF7563FA) //  3.64:1 on LandDaylight
 val ResidentialDaylight = Color(0xFF8E8A80) //  2.94:1 on LandDaylight (area fill)
 val LabelDaylight = Color(0xFF1A1A1A) // 14.84:1 on LandDaylight
 

@@ -233,6 +233,57 @@ The 13.x artifact also pins `kotlin-stdlib` to 2.2.10 and `okhttp` to 4.12.0;
 the version catalogue matches both so the graph resolves to a single copy of
 each.
 
+### The map surface and the generated style
+
+`ui/map/MapSurface.kt` wraps a `MapView` for Compose; `map/MapStyleFactory.kt`
+generates the style. Four decisions hold there:
+
+* **The style is generated, not authored.** Every colour is read from
+  `assets/palette.json` through `ThemePalette`, so the dark/daylight switch is
+  the palette switch and the contrast gate covers what is actually drawn. The
+  unit test scans the built style for `#RRGGBB` literals and fails if one is not
+  in the palette.
+* **One source, and it is local.** The only source is
+  `{"type":"vector","url":"pmtiles://file://…"}`. MapLibre's native PMTiles
+  reader answers the TileJSON request from the archive itself, so the map has no
+  remote dependency at all. `MapStyleFactory.build` rejects anything that is not
+  a `pmtiles://` URL.
+* **No text yet.** There is no `glyphs` URL and therefore no symbol layer:
+  labels need a fontstack the offline pack does not yet carry. Fetching glyphs
+  from a CDN would break the offline promise, so label layers wait for Phase 5
+  when the glyph set ships with the pack. The label *colour* is already gated.
+* **The camera comes from the archive.** The PMTiles header carries a bounding
+  box; the surface frames it with `CameraUpdateFactory.newLatLngBounds`, falling
+  back to the header's centre/zoom for a degenerate box. A pack is usable as
+  soon as it is on disk, with no separate configuration.
+
+Two API facts cost real debugging time and are worth recording:
+
+* `setStyle(String)` treats its argument as a **URL**, not inline JSON. Passing a
+  style document produces `Mbgl-HttpRequest: Unable to parse resourceUrl {"version":8,…}`.
+  The inline form is `setStyle(Style.Builder().fromJson(json), callback)`.
+* In style expressions, the third argument of `"in"` must be a `["literal", […]]`
+  array, and an `"interpolate"` must name its input, i.e.
+  `["interpolate", ["exponential", 1.3], ["zoom"], z0, v0, z1, v1]`. A bare array
+  is parsed as an expression (every class name becomes an unknown operator) and
+  omitting `["zoom"]` produces "Expected an even number of arguments"; in both
+  cases the style still loads and the affected layer is silently dropped.
+  `MapStyleFactoryTest` now asserts both shapes.
+
+`PackLocator` is the pre-Phase-6 stand-in for the pack manager: it scans
+`filesDir/packs` and `getExternalFilesDir(null)/packs`, validates each archive
+header with `PmtilesArchive`, and returns the first usable one. The directory
+choice is what makes `adb push` to
+`/sdcard/Android/data/com.astramaps.app/files/packs/` a working dev workflow
+without root or scoped-storage permissions.
+
+The Compose wrapper also has to replay lifecycle state. A `MapView` that is
+never `onStart()`ed never delivers `getMapAsync`, and the map stays blank with
+no error — which is exactly what happened to the first instrumented render test,
+where composition finished after the host was already resumed. The
+`DisposableEffect` therefore catches the map up to the owner's current state
+instead of waiting for events that already fired.
+
 ---
 
 ## 8. Routing

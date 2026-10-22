@@ -15,19 +15,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.astramaps.app.BuildConfig
+import com.astramaps.app.data.map.LocalPack
+import com.astramaps.app.ui.map.MapSurface
 
 /**
  * Home screen.
  *
- * Phase 1 shows build/runtime identity and the (still empty) pack list.
- * Phase 2 replaces the pack list with live data and adds the search entry
- * point; Phase 3 replaces the body with the map surface.
+ * When a map pack is present this is the map surface: that is the whole point
+ * of the app, and it is what Phase 3 puts in place. With no pack installed it
+ * falls back to the build/runtime panel, which is also the state the offline
+ * acceptance harness and the emulator start from.
  */
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
     installedPackIds: List<String> = emptyList(),
+    mapPack: LocalPack? = null,
+    darkTheme: Boolean = false,
 ) {
+    if (mapPack != null) {
+        MapSurface(
+            pack = mapPack,
+            darkTheme = darkTheme,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     Scaffold(modifier = modifier) { innerPadding ->
         LazyColumn(
             modifier = Modifier

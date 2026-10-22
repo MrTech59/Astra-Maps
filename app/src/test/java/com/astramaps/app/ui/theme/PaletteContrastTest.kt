@@ -1,9 +1,7 @@
 package com.astramaps.app.ui.theme
 
+import androidx.compose.ui.graphics.toArgb
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -31,37 +29,19 @@ import java.util.Locale
  *     carry the boundary clears 3:1 against the fill.
  *  4. Holds both themes to the same gate, so daylight cannot quietly regress
  *     while dark stays compliant.
+ *  5. Re-measures every colour against the landcover wash, because the map
+ *     style draws that wash over the land and a tint that quietly eroded the
+ *     roads' contrast would otherwise be invisible to this test.
+ *  6. Checks that the Compose colour constants in `Color.kt` still equal the
+ *     palette file, since the app theme and the map style consume the same
+ *     design decision through two different code paths.
  *
- * The fourth point is not theoretical: the daylight coastline was originally
- * `#1A4E8A`, which measures 2.71:1 against the daylight water fill. The old
- * version of this test never measured the coastline at all, so it passed.
+ * Point 1 is not theoretical: the daylight coastline was originally `#1A4E8A`,
+ * which measures 2.71:1 against the daylight water fill. The old version of
+ * this test never measured the coastline at all, so it passed.
  */
 @RunWith(RobolectricTestRunner::class)
 class PaletteContrastTest {
-
-    @Serializable
-    private data class PaletteFile(
-        val version: Int = 1,
-        val themes: Map<String, ThemePalette> = emptyMap(),
-    )
-
-    @Serializable
-    private data class ThemePalette(
-        val land: ColorEntry,
-        val waterFill: ColorEntry? = null,
-        val coastlineStroke: ColorEntry? = null,
-        val roads: Map<String, ColorEntry> = emptyMap(),
-        val labels: ColorEntry? = null,
-        val exemptions: Map<String, String> = emptyMap(),
-    )
-
-    @Serializable
-    private data class ColorEntry(
-        val hex: String,
-        val alpha: Float? = null,
-        @SerialName("contrastOnLand") val contrastOnLand: Double? = null,
-        @SerialName("contrastOnWater") val contrastOnWater: Double? = null,
-    )
 
     /**
      * One colour, the background it is measured against, and the rule it must
@@ -76,30 +56,27 @@ class PaletteContrastTest {
     )
 
     private companion object {
-        val JSON = Json { ignoreUnknownKeys = true }
-
         const val TEXT = 4.5
         const val NON_TEXT = 3.0
 
-        /** Elements the gate itself knows about; anything else in `themes` is ignored. */
+        /** Elements the gate itself knows about; a typo in the JSON cannot hide. */
         val ROAD_CLASSES = listOf("motorway", "major", "minor", "residential")
 
         fun fmt(value: Double): String = String.format(Locale.ROOT, "%.2f", value)
     }
 
-    private fun loadPalette(): PaletteFile {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val json = context.assets.open("palette.json").bufferedReader().use { it.readText() }
-        return JSON.decodeFromString(PaletteFile.serializer(), json)
-    }
+    private fun loadPalette(): PaletteFile =
+        Palette.load(ApplicationProvider.getApplicationContext<android.content.Context>())
 
     /**
      * Every colour in a theme that a reader has to be able to see, measured as
      * rendered. The coastline is composited over both backgrounds it separates,
      * because a stroke that vanishes into either one is not doing its job.
+     *
+     * [land] is a parameter rather than always `theme.land` so the same gate can
+     * be re-run against the landcover wash.
      */
-    private fun gates(theme: ThemePalette): List<Gate> {
-        val land = theme.land.hex
+    private fun gatesOn(theme: ThemePalette, land: String): List<Gate> {
         val labels = requireNotNull(theme.labels) { "theme has no labels entry" }
         val water = requireNotNull(theme.waterFill) { "theme has no waterFill entry" }
         val stroke = requireNotNull(theme.coastlineStroke) { "theme has no coastlineStroke entry" }
@@ -139,11 +116,29 @@ class PaletteContrastTest {
         }
     }
 
+    private fun gates(theme: ThemePalette): List<Gate> = gatesOn(theme, theme.land.hex)
+
     /** `coastlineStroke over water` and `coastlineStroke over land` share one exemption. */
     private fun exemptionKey(gateId: String): String = gateId.substringBefore(' ')
 
-    private fun nonCompliant(theme: ThemePalette): List<Gate> =
-        gates(theme).filter { it.ratio < it.threshold }
+    /** Every failing gate must be covered by a stated exemption. */
+    private fun assertGateHolds(themeName: String, theme: ThemePalette, gates: List<Gate>) {
+        for (gate in gates) {
+            if (gate.ratio >= gate.threshold) continue
+
+            val key = exemptionKey(gate.id)
+            val reason = theme.exemptions[key]
+            assertNotNull(
+                "$themeName ${gate.id} measures ${fmt(gate.ratio)}:1 against " +
+                    "${gate.background}, below ${gate.threshold}:1, and has no exemption",
+                reason,
+            )
+            assertTrue(
+                "$themeName exemption '$key' must state a real reason, was '$reason'",
+                reason!!.trim().length >= 20,
+            )
+        }
+    }
 
     @Test
     fun `palette file parses and contains both themes`() {
@@ -159,7 +154,7 @@ class PaletteContrastTest {
     @Test
     fun `the gate actually measures every element of every theme`() {
         // Guards against a vacuous pass: the gate would silently stop testing
-        // anything if an entry were dropped from the parser or the JSON.
+        // anything if an entry were dropped from the model or the JSON.
         for ((themeName, theme) in loadPalette().themes) {
             val gates = gates(theme)
             assertEquals(
@@ -253,21 +248,25 @@ class PaletteContrastTest {
     @Test
     fun `informative strokes and fills meet 3 to 1, or are exempted with a reason`() {
         for ((themeName, theme) in loadPalette().themes) {
-            for (gate in gates(theme)) {
-                if (gate.ratio >= gate.threshold) continue
+            assertGateHolds(themeName, theme, gates(theme))
+        }
+    }
 
-                val key = exemptionKey(gate.id)
-                val reason = theme.exemptions[key]
-                assertNotNull(
-                    "$themeName ${gate.id} measures ${fmt(gate.ratio)}:1 against " +
-                        "${gate.background}, below ${gate.threshold}:1, and has no exemption",
-                    reason,
-                )
-                assertTrue(
-                    "$themeName exemption '$key' must state a real reason, was '$reason'",
-                    reason!!.trim().length >= 20,
-                )
+    @Test
+    fun `the landcover wash does not push any gated colour below its threshold`() {
+        for ((themeName, theme) in loadPalette().themes) {
+            val tint = requireNotNull(theme.landcoverTint) {
+                "$themeName must declare the landcoverTint the style draws"
             }
+            val alpha = requireNotNull(tint.alpha) { "$themeName landcoverTint has no alpha" }
+            val shade = Contrast.blend(tint.hex, theme.land.hex, alpha.toDouble())
+
+            assertTrue(
+                "$themeName landcover wash must actually change the land, otherwise it is " +
+                    "untested dead configuration",
+                shade != theme.land.hex,
+            )
+            assertGateHolds(themeName, theme, gatesOn(theme, shade))
         }
     }
 
@@ -275,7 +274,7 @@ class PaletteContrastTest {
     fun `exemptions are live and a waterFill exemption is backed by the coastline`() {
         for ((themeName, theme) in loadPalette().themes) {
             val gates = gates(theme)
-            val failing = nonCompliant(theme)
+            val failing = gates.filter { it.ratio < it.threshold }
 
             for ((key, reason) in theme.exemptions) {
                 val named = gates.filter { exemptionKey(it.id) == key }
@@ -338,6 +337,61 @@ class PaletteContrastTest {
                 "${fmt(Contrast.ratio(Contrast.blend(stroke.hex, water.hex, alpha), water.hex))}:1",
             Contrast.ratio(Contrast.blend(stroke.hex, water.hex, alpha), water.hex) >= NON_TEXT,
         )
+    }
+
+    @Test
+    fun `compose colour constants match the palette file`() {
+        // The map style reads palette.json; the Material theme reads Color.kt.
+        // They must describe one palette, not two that happen to start equal.
+        val expected = mapOf(
+            PaletteFile.DARK to mapOf(
+                "land" to LandDark,
+                "waterFill" to WaterFillDark,
+                "coastlineStroke" to CoastlineDark,
+                "roads.motorway" to MotorwayDark,
+                "roads.major" to MajorDark,
+                "roads.minor" to MinorDark,
+                "roads.residential" to ResidentialDark,
+                "labels" to LabelDark,
+            ),
+            PaletteFile.DAYLIGHT to mapOf(
+                "land" to LandDaylight,
+                "waterFill" to WaterFillDaylight,
+                "coastlineStroke" to CoastlineDaylight,
+                "roads.motorway" to MotorwayDaylight,
+                "roads.major" to MajorDaylight,
+                "roads.minor" to MinorDaylight,
+                "roads.residential" to ResidentialDaylight,
+                "labels" to LabelDaylight,
+            ),
+        )
+
+        for ((themeName, theme) in loadPalette().themes) {
+            val colours = expected.getValue(themeName)
+
+            fun actual(id: String): String = when {
+                id == "land" -> theme.land.hex
+                id == "waterFill" -> theme.waterFill!!.hex
+                id == "coastlineStroke" -> theme.coastlineStroke!!.hex
+                id == "labels" -> theme.labels!!.hex
+                id.startsWith("roads.") -> theme.roads.getValue(id.removePrefix("roads.")).hex
+                else -> error("unknown colour id '$id'")
+            }
+
+            for ((id, composeColour) in colours) {
+                val composeHex = String.format(
+                    Locale.ROOT,
+                    "#%06X",
+                    composeColour.toArgb() and 0x00FFFFFF,
+                )
+                assertEquals(
+                    "$themeName/$id drifted: palette.json says ${actual(id)}, Color.kt says " +
+                        "$composeHex",
+                    actual(id),
+                    composeHex,
+                )
+            }
+        }
     }
 
     @Test

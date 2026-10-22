@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.astramaps.app.BuildConfig
 import com.astramaps.app.data.local.AstraDatabase
+import com.astramaps.app.data.map.PackLocator
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -49,4 +50,13 @@ class AppContainer(context: Context) {
         .databaseBuilder(appContext, AstraDatabase::class.java, AstraDatabase.NAME)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
+
+    /**
+     * Finds the map pack the renderer should draw.
+     *
+     * A stand-in for the Phase 6 pack manager: it scans the two app-private
+     * directories a pack can be placed in and validates the archive header
+     * before the renderer is pointed at it.
+     */
+    val packLocator: PackLocator = PackLocator(appContext)
 }

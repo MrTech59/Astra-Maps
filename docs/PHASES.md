@@ -53,12 +53,29 @@ offline guarantees are provable.
 
 | Exit criterion | Status |
 |---|---|
-| TileJSON resolves from `pmtiles://file://` | ⬜ |
-| A z12 tile returns > 0 bytes from the local archive | ⬜ |
-| Map renders on the physical device (OpenGL ES path — the device has no Vulkan) | ⬜ |
-| Palette contrast regression test over `palette.json`: labels ≥ 4.5:1 | ⬜ |
-| Same test: non-text elements ≥ 3:1 | ⬜ |
-| Daylight theme renders and passes the same gate | ⬜ |
+| TileJSON resolves from `pmtiles://file://` | ✅. MapLibre reports `sources=[astra, org.maplibre.annotations]` after loading the generated style; `MapRenderTest` polls for the `astra` source and fails if it never appears. |
+| A z12 tile returns > 0 bytes from the local archive | ✅. `OfflineTileServingTest.z12TileCarriesRoadAndWaterFeatures` reads a real z12 tile from the fixture and asserts both roads and water features decode. |
+| Map renders on the physical device (OpenGL ES path — the device has no Vulkan) | ⬜. Blocked: the SM-A175F dropped off wireless ADB (port closed) during this session. Emulator verified; the phone run is the remaining step. |
+| Palette contrast regression test over `palette.json`: labels ≥ 4.5:1 | ✅. Dark 12.30:1, daylight 14.84:1. |
+| Same test: non-text elements ≥ 3:1 | ✅. Every element is measured as rendered; the two sub-threshold colours (water fill in both themes, residential roads) carry explicit, test-enforced exemptions, and daylight's waterFill exemption only holds because the coastline clears 3.74:1 against the fill. |
+| Daylight theme renders and passes the same gate | ✅. `MapRenderTest` forces `MODE_NIGHT_NO`, snapshots the map and finds the daylight land `#EFEDE4` and water `#5B96D6` in the framebuffer; the gate runs over both themes. |
+
+Phase 3 defects found by actually running it (all fixed):
+
+* The daylight coastline `#1A4E8A` measured **2.71:1** against the daylight water
+  fill — failing the plan's own 3:1 gate, and invalidating the water-fill
+  exemption. It is now `#123A63` (3.74:1 on water, 9.89:1 on land). The old
+  test never measured the coastline, which is why it passed.
+* The dark coastline's recorded `contrastOnLand` was **4.90**, a ratio no colour
+  in the theme produces; the composited stroke measures **4.24:1**.
+* The daylight minor road class `#7C6BFF` measured 3.31:1 on bare land but
+  **2.996:1** under the 5 % landcover wash. It is now `#7563FA` (3.64:1 land,
+  3.29:1 washed). The gate re-measures every colour against the wash.
+* `setStyle(String)` treats its argument as a URL; the style must be applied via
+  `Style.Builder().fromJson(…)`.
+* Style expressions: `"in"` needs a `["literal", […]]` class list, and
+  `"interpolate"` needs an explicit `["zoom"]` input. Both failures were silent —
+  the style loaded and the layer was dropped.
 
 **Palette decisions resolved in Phase 1 (all measured, not estimated):**
 
