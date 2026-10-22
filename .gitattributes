@@ -1,0 +1,20 @@
+# Normalise line endings so a Windows checkout and a Linux CI checkout agree.
+#
+# The repository stores LF. Text files are checked out with LF everywhere
+# except the Windows-only script types, which Windows tooling expects as CRLF.
+* text=auto eol=lf
+
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Harmless if the platform disagrees, but keeps the mode stable.
+gradlew  text eol=lf
+
+# Never apply end-of-line translation to binary assets.
+*.jar   binary
+*.png   binary
+*.webp  binary
+*.jpg   binary
+*.ttf   binary
+*.otf   binary

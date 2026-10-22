@@ -19,19 +19,26 @@ jobs:
     name: Build + unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Verify Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
+        uses: gradle/actions/wrapper-validation@v6
+
+      # The wrapper is authored on Windows, where core.fileMode is false and
+      # the executable bit cannot be recorded from the filesystem. The index
+      # carries mode 100755, but restoring it here keeps the build working even
+      # if a future commit drops that bit again.
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Compile + unit test
         run: ./gradlew --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest :third_party:brouter:build
@@ -40,7 +47,7 @@ jobs:
         run: ./gradlew --no-daemon :app:lintDebug
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
@@ -50,20 +57,72 @@ jobs:
     name: Tile schema verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Download planetiler
         run: |
+          set -euo pipefail
           mkdir -p tools/bin
           curl -fsSL -o tools/bin/planetiler.jar \
             https://github.com/onthegomap/planetiler/releases/download/v0.10.2/planetiler.jar
-          echo "sha256  tools/bin/planetiler.jar" | sha256sum --check --strict
+
+          # The hash is committed, and the official release asset is named
+          # `planetiler.jar` (not `planetiler-0.10.2.jar`).
+          expected="$(awk '{print $1}' schemas/planetiler.sha256)"
+          actual="$(sha256sum tools/bin/planetiler.jar | awk '{print $1}')"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error title=planetiler.jar checksum mismatch::expected $expected, got $actual"
+            exit 1
+          fi
+          echo "planetiler.jar sha256 verified: $actual"
 
       - name: Verify Astra tile schema
         run: java -jar tools/bin/planetiler.jar verify schemas/astra_schema.yml
+
+  instrumented:
+    name: Instrumented tests (API 35)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # The emulator needs hardware acceleration; the runner exposes /dev/kvm
+      # but not with permissions that the runner user can use by default.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # This is the proof that Android's bundled SQLite has FTS4 and lacks
+      # FTS5: the local POI index is built on FTS4 because FTS5 is absent from
+      # every Android release so far.
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: >-
+            -no-window -no-audio -no-boot-anim -no-snapshot
+            -gpu swiftshader_indirect
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
