@@ -41,6 +41,7 @@ lookups.dat
 # proves a prebuilt FTS4 index written by the host SQLite is readable by
 # Android's bundled SQLite.
 !app/src/androidTest/assets/*.db
+!app/src/androidTest/assets/*.pmtiles
 
 # planetiler working dirs
 planetiler-cache/

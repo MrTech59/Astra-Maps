@@ -242,7 +242,7 @@ in `app/proguard-rules.pro` so a release build can be verified to link.
 | Layer | Where | What it proves |
 |---|---|---|
 | Pure JVM | `app/src/test/` | Palette contrast maths, BRouter vendoring invariants, Room DAO behaviour (Robolectric). |
-| Instrumented | `app/src/androidTest/` | What only a real device can prove: FTS4 vs FTS5, real SQLite behaviour, native library loading. |
+| Instrumented | `app/src/androidTest/` | What only a real device can prove: FTS4 vs FTS5, real SQLite behaviour, native library loading, and that a prebuilt pack still yields tiles with the radios off. |
 | Release build | CI | R8 does not strip `btools.router.StdModel`, `btools.router.KinematicModel` or `btools.mapaccess.Rd5DiffTool`. |
 
 CI runs `:app:assembleDebug`, `:app:testDebugUnitTest`, `:third_party:brouter:build`
@@ -253,6 +253,7 @@ and `:app:lintDebug`, and separately validates the Planetiler tile schema.
 ```bash
 ./scripts/run-instrumented-tests.ps1                 # the only connected device
 ./scripts/run-instrumented-tests.ps1 -Serial 192.168.1.151:34013
+./scripts/run-instrumented-tests.ps1 -AirplaneMode   # enforce the offline gate
 ```
 
 The script exists because of a hard limitation in AGP 8.12, verified by reading
@@ -278,6 +279,45 @@ That works over USB, over TCP and over wireless debugging, on any host OS.
 
 `:app:connectedDebugAndroidTest` still works against the **emulator**, whose
 serial (`emulator-5554`) is a legal file name, and is what CI uses.
+
+### The offline acceptance harness
+
+`OfflineTileServingTest` is the Phase 2 proof that the offline promise is real,
+not aspirational. With the radios off it installs a real planetiler archive into
+app-private storage, opens it, and reads **every** tile it advertises.
+
+The archive is `app/src/androidTest/assets/berlin_mitte.pmtiles` — 2.86 MB,
+20 tiles across z6–14, cut from the same profile and the same Berlin extract as
+a production pack:
+
+```bash
+planetiler generate-custom --schema=schemas/astra_schema.yml \
+  --bounds=13.38,52.50,13.42,52.53 --maxzoom=14 --render_maxzoom=14 \
+  --output=app/src/androidTest/assets/berlin_mitte.pmtiles
+```
+
+Three things make it a gate rather than a demo:
+
+* **The device must actually be offline.** Airplane mode cannot be enabled from
+  inside the app, and enabling it over wireless ADB would drop the connection
+  carrying the results. So the *host* enables it and the test checks
+  `ConnectivityManager.activeNetwork` is null. If a network is up the test
+  either skips (developer default) or fails (`-e astra.requireOffline true`),
+  which is what CI and `-AirplaneMode` pass.
+* **CI runs the whole suite in airplane mode**, not just this test, so no
+  instrumented test can quietly depend on a network.
+* **Reading a tile does not use MapLibre.** `PmtilesArchive` is a small
+  read-only PMTiles v3 reader (header, varint directories, gzip payloads). It
+  is not on the rendering path — MapLibre reads `pmtiles://` natively — but it
+  lets the app validate a pack *before* marking it installed, since PMTiles
+  carries no checksums of its own. The test also asserts the tile-id Hilbert
+  arithmetic is a bijection over every entry, which is what catches a
+  transcription error that a single lookup would hide.
+
+PMTiles v3 stores a directory **column-wise**: entry count, then all tile-id
+deltas, then all run lengths, then all lengths, then all offsets (with `0`
+meaning "contiguous with the previous entry"). Parsing it row-wise produces
+plausible garbage, so the reader mirrors the reference decoder.
 
 ---
 

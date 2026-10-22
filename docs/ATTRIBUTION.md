@@ -23,6 +23,19 @@ attribution screen.
 
 Source extracts are obtained from [Geofabrik](https://download.geofabrik.de/).
 
+### Committed test fixtures
+
+Two binary fixtures are committed so the instrumented tests are reproducible
+without a build-time download:
+
+| File | Derived from | Licence |
+|---|---|---|
+| `app/src/androidTest/assets/berlin_mitte.pmtiles` | Berlin extract via our own planetiler profile | ODbL 1.0 — a Derivative Database of OpenStreetMap |
+| `app/src/androidTest/assets/astra_poi_fixture.db` | Same extract via `tools/build_poi_index.py` | ODbL 1.0 — a Derivative Database of OpenStreetMap |
+
+They are test data, not shipped app content, but they are still OSM derivatives
+and are offered under the same ODbL terms as the source data.
+
 ### Protomaps
 
 The PMTiles archive format and tooling ecosystem originate with Protomaps.

@@ -115,7 +115,13 @@ jobs:
       # This is the proof that Android's bundled SQLite has FTS4 and lacks
       # FTS5: the local POI index is built on FTS4 because FTS5 is absent from
       # every Android release so far.
-      - name: Run instrumented tests
+      #
+      # The whole suite runs in airplane mode. That is the offline acceptance
+      # harness: OfflineTileServingTest refuses to skip (astra.requireOffline)
+      # and then reads every tile out of a real planetiler archive, so a test
+      # that quietly reached for the network would fail the build instead of
+      # passing on a machine that happened to be online.
+      - name: Run instrumented tests (airplane mode)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -125,4 +131,20 @@ jobs:
           emulator-options: >-
             -no-window -no-audio -no-boot-anim -no-snapshot
             -gpu swiftshader_indirect
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+          script: |
+            set -euo pipefail
+            adb shell cmd connectivity airplane-mode enable
+            for _ in $(seq 1 30); do
+              if adb shell dumpsys connectivity | grep -q 'Active default network: none'; then
+                break
+              fi
+              sleep 1
+            done
+            if ! adb shell dumpsys connectivity | grep -q 'Active default network: none'; then
+              echo '::error title=airplane mode::the emulator still has a default network'
+              adb shell dumpsys connectivity | grep -m1 'Active default network' || true
+              exit 1
+            fi
+            echo "device is offline: $(adb shell dumpsys connectivity | grep -m1 'Active default network')"
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.astra.requireOffline=true

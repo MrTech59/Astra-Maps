@@ -25,19 +25,32 @@
     `com.astramaps.app.data.local.Fts4AvailabilityTest`. Defaults to every
     test in the test APK.
 
+.PARAMETER AirplaneMode
+    Put the device into airplane mode for the duration of the run, and pass
+    `-e astra.requireOffline true` so the offline acceptance test fails rather
+    than skips if a network is still up. Airplane mode is restored afterwards.
+
+    The device must be reachable over USB or be an emulator: switching airplane
+    mode on over wireless ADB kills the connection that carries the results, so
+    this refuses a `host:port` serial instead of hanging.
+
 .EXAMPLE
     ./scripts/run-instrumented-tests.ps1
     ./scripts/run-instrumented-tests.ps1 -Serial 192.168.1.151:34013
+    ./scripts/run-instrumented-tests.ps1 -AirplaneMode
 #>
 [CmdletBinding()]
 param(
     [string] $Serial = '',
     [string] $Class = '',
-    [switch] $SkipBuild
+    [switch] $SkipBuild,
+    [switch] $AirplaneMode
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+$airplaneEnabled = $false
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
@@ -72,6 +85,35 @@ try {
     $sdk = @(Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'getprop', 'ro.build.version.sdk'))
     Write-Host ("Android {0} (API {1})" -f $props[0], $sdk[0]) -ForegroundColor Cyan
 
+    # --- offline gate --------------------------------------------------------
+    if ($AirplaneMode) {
+        if ($Serial.Contains(':')) {
+            throw ("-AirplaneMode cannot be used with a wireless ADB serial ($Serial): " +
+                'enabling airplane mode would drop the connection carrying the test ' +
+                'results. Attach the phone over USB, or run against an emulator.')
+        }
+        Write-Host 'Enabling airplane mode...' -ForegroundColor Cyan
+        Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'cmd', 'connectivity', 'airplane-mode', 'enable') | Out-Null
+        $airplaneEnabled = $true
+
+        # The state command is immediate; the network stack needs a moment to
+        # tear down. Poll until there is no default network, so the test cannot
+        # race the radio shutdown.
+        $deadline = (Get-Date).AddSeconds(30)
+        while ($true) {
+            $state = @(Invoke-Adb -AdbArgs @('-s', $Serial, 'shell', 'dumpsys', 'connectivity'))
+            $defaultNetwork = $state | Where-Object { $_ -match 'Active default network:\s*(\S+)' } |
+                Select-Object -First 1
+            $none = $defaultNetwork -and $defaultNetwork -match 'Active default network:\s*none'
+            if ($none) { break }
+            if ((Get-Date) -gt $deadline) {
+                throw "airplane mode did not take effect; last state: $defaultNetwork"
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        Write-Host 'Device is offline.' -ForegroundColor Cyan
+    }
+
     # --- build ---------------------------------------------------------------
     if (-not $SkipBuild) {
         Write-Host 'Building APKs...' -ForegroundColor Cyan
@@ -99,6 +141,7 @@ try {
     $runner = 'com.astramaps.app.test/androidx.test.runner.AndroidJUnitRunner'
     $adbArgs = @('-s', $Serial, 'shell', 'am', 'instrument', '-w', '-r')
     if ($Class) { $adbArgs += @('-e', 'class', $Class) }
+    if ($AirplaneMode) { $adbArgs += @('-e', 'astra.requireOffline', 'true') }
     $adbArgs += $runner
 
     Write-Host 'Running instrumented tests...' -ForegroundColor Cyan
@@ -123,18 +166,29 @@ try {
     # `am instrument` always reports INSTRUMENTATION_CODE: -1 for a run that
     # completed, whether it passed or failed, so it carries no signal here.
 
-    # Surface any stack traces the runner reported.
-    $stack = @($raw | Where-Object { $_ -match 'INSTRUMENTATION_STATUS: stack=' } | ForEach-Object {
+    # An assumption failure is a *skip*, not a failure: JUnit reports the run as
+    # OK, and the status code for it is -4. Keeping the two apart matters here,
+    # because the offline harness deliberately skips when the device is online.
+    $skipped = @($raw | Where-Object { $_ -match 'INSTRUMENTATION_STATUS_CODE:\s*-4' }).Count
+
+    # Surface any stack traces the runner reported, separating real failures
+    # from the assumption violations above.
+    $stacks = @($raw | Where-Object { $_ -match 'INSTRUMENTATION_STATUS: stack=' } | ForEach-Object {
         ($_ -replace '^.*INSTRUMENTATION_STATUS: stack=', '').Trim()
     })
-    if ($stack.Count -gt 0) {
+    $failuresDetail = @($stacks | Where-Object { $_ -notmatch 'AssumptionViolatedException' })
+    if ($failuresDetail.Count -gt 0) {
         Write-Host ''
         Write-Host '--- failures ---' -ForegroundColor Red
-        $stack | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        $failuresDetail | ForEach-Object { Write-Host $_ -ForegroundColor Red }
     }
 
     Write-Host ''
-    Write-Host "Tests run: $testsRun, failures: $failures" -ForegroundColor Cyan
+    Write-Host "Tests run: $testsRun, failures: $failures, skipped: $skipped" -ForegroundColor Cyan
+    if ($skipped -gt 0 -and $failures -eq 0) {
+        Write-Host ("$skipped test(s) skipped on an assumption -- the offline harness needs " +
+            'the radios off. Re-run with -AirplaneMode to enforce the gate.') -ForegroundColor Yellow
+    }
 
     # Persist a JUnit XML alongside the Gradle output so the result is
     # inspectable after the fact, exactly like an AGP run would leave.
@@ -142,7 +196,7 @@ try {
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
     $xml = Join-Path $outDir "TEST-$($Serial -replace '[^A-Za-z0-9._-]', '_').xml"
     $suite = 'com.astramaps.app'
-    $xmlBody = "<?xml version='1.0' encoding='UTF-8' ?>`n<testsuite tests=`"$testsRun`" failures=`"$failures`" errors=`"0`" skipped=`"0`" time=`"0`" hostname=`"$Serial`">`n  <properties>`n    <property name=`"device`" value=`"$($Serial -replace '[^A-Za-z0-9._-]', '_')`" />`n  </properties>`n  <system-out><![CDATA[$text]]></system-out>`n</testsuite>`n"
+    $xmlBody = "<?xml version='1.0' encoding='UTF-8' ?>`n<testsuite tests=`"$testsRun`" failures=`"$failures`" errors=`"0`" skipped=`"$skipped`" time=`"0`" hostname=`"$Serial`">`n  <properties>`n    <property name=`"device`" value=`"$($Serial -replace '[^A-Za-z0-9._-]', '_')`" />`n  </properties>`n  <system-out><![CDATA[$text]]></system-out>`n</testsuite>`n"
     Set-Content -Path $xml -Value $xmlBody -Encoding UTF8
     Write-Host "Report: $xml"
 
@@ -156,5 +210,13 @@ try {
     exit 0
 }
 finally {
+    if ($airplaneEnabled) {
+        try {
+            & $adb -s $Serial shell cmd connectivity airplane-mode disable | Out-Null
+            Write-Host 'Airplane mode disabled.' -ForegroundColor Cyan
+        } catch {
+            Write-Host "Could not disable airplane mode; run 'adb -s $Serial shell cmd connectivity airplane-mode disable'" -ForegroundColor Yellow
+        }
+    }
     Pop-Location
 }
